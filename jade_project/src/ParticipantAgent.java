@@ -258,6 +258,24 @@ public class ParticipantAgent extends Agent {
 
 						System.out.println("Proposed json to "+getAID().getLocalName()+": \n"+json);//update a list of known sellers (DF)
 						
+						// Alexis's PART 
+						JSONArray list = (JSONArray)json.get("asked_hours");
+						
+						int i = 0;
+						while (list.get(i) == null) {
+							i++;
+						}
+						
+						long currentAskedHour = (long) list.get(i);
+						if (calendar.get(currentAskedHour) > 0.5) {
+							System.out.println("jsuis chaud");
+						} else {
+							System.out.println("nope");
+						}	
+						// There IS A NULL EXPECTION ERROR HERE SO ITS NORMAL
+						// --------
+						
+						
 						// look for priority and do neccassary calc.
 						// if it is not available, send 1st participant a message that the xx participant not available 
 						// if even one participant not available for entire day, send message to SchedularAgent through first participant that the meeting can not be set.
