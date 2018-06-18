@@ -187,7 +187,7 @@ public class ParticipantAgent extends Agent {
 					e.printStackTrace();
 				}
 			    
-			    System.out.println("gelen json: \n"+json);//update a list of known sellers (DF)
+			    System.out.println("received json: \n"+json);//update a list of known sellers (DF)
 				// calculate
 			    
 			    
@@ -290,7 +290,7 @@ public class ParticipantAgent extends Agent {
 							e.printStackTrace();
 						}
 
-						System.out.println(getAID().getLocalName()+": got from " +msg.getSender().getName()+json);
+						System.out.println(getAID().getLocalName()+": got from " +msg.getSender().getLocalName()+json);
 						
 						// look for priority and do neccassary calc.
 						// if it is not available, send 1st participant a message that the xx participant not available 
@@ -306,6 +306,8 @@ public class ParticipantAgent extends Agent {
 					 
 						
 						Integer[] asked_hours = new Integer[list.size()];
+						
+						
 						for(int i = 0; i < list.size(); i++) 
 						{
 							if (list.get(i)!=null)
@@ -320,11 +322,9 @@ public class ParticipantAgent extends Agent {
 								}
 							}
 						}
-						System.out.println(getAID().getLocalName()+": priority-> "+ priority+"\n");
 						
-						if (priority >= 0.5)
-						{
-							ACLMessage reply = msg.createReply();
+						
+						ACLMessage reply = msg.createReply();
 							reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
 							
 					for (int i = 0; i < participantAgents.length; ++i) {
@@ -332,6 +332,10 @@ public class ParticipantAgent extends Agent {
 
 						reply.addReceiver(participantAgents[i]);
 					}
+					
+						if (priority >= 0.5)
+						{
+							
 					JSONObject obj = new JSONObject();
 					obj.put("availableHours", availableHours);
 					obj.put("asked_hours",Arrays.asList(asked_hours));
@@ -340,26 +344,24 @@ public class ParticipantAgent extends Agent {
 	      
 				    reply.setContent(jsonString);
 				    reply.setConversationId("participant-accept");
-				    reply.setReplyWith("reply"+System.currentTimeMillis()); //unique value
-				    myAgent.send(reply);
+				    
 				    mt = MessageTemplate.and(MessageTemplate.MatchConversationId("participant-accept"),
 				                            MessageTemplate.MatchInReplyTo(reply.getReplyWith()));
 				     
 				    System.out.println(getAID().getLocalName() + ": Send accept_propasals. ");
-			        System.out.println("highest: "+ priority);
-					myAgent.send(reply);	
+					//myAgent.send(reply);	
 					
 						}
 						else
 						{	// that hour is not available for participant, suggesting a new one
 						    for(Object key:calendar.keySet()) 
 						    {
-							    if (priority < calendar.get(key))
+							    if (priority < calendar.get(Integer.parseInt(String.valueOf(key))))
 							    {
 									for (int i = 0; i < availableHours.size(); i++)
 									  if (!String.valueOf(key).equals(String.valueOf(asked_hours[i])) && String.valueOf(availableHours.get(i)).equals(String.valueOf(key)))
 									  {
-									  	priority = calendar.get(key);
+									  	priority = calendar.get(Integer.parseInt(String.valueOf(key)));
 									  	hourIndex = Integer.parseInt(String.valueOf(key));
 									  }
 								  }
@@ -371,10 +373,32 @@ public class ParticipantAgent extends Agent {
 								i++;
 							
 							asked_hours[i]=hourIndex;
-							System.out.println(getAID().getLocalName()+": asked["+i+"]: "+asked_hours[i]);	
+							
+					// we should add new info to reply.setContent() also we should re-initiate negotitation phase 							
+							JSONObject obj = new JSONObject();
+							obj.put("availableHours", availableHours);
+							obj.put("asked_hours",Arrays.asList(asked_hours));
+							jsonString = obj.toString();
+					
+							reply.setContent(jsonString);
+
+							reply.setPerformative(ACLMessage.REFUSE);
+							reply.setConversationId("participant-refused");
+							mt = MessageTemplate.and(MessageTemplate.MatchConversationId("participant-refused"),
+				                            MessageTemplate.MatchInReplyTo(reply.getReplyWith()));
+				         	
+				         	System.out.println(getAID().getLocalName() + ": Send REFUSED.\n"+jsonString);
+
 						}
 				        
-//*/
+//*/											
+				     	System.out.println("highest: "+ priority);
+						reply.setReplyWith("reply"+System.currentTimeMillis()); //unique value
+				    	myAgent.send(reply);
+
+						System.out.println(getAID().getLocalName()+": priority-> "+ priority+"\n");
+						System.out.println(getAID().getLocalName() + ": Send refused to other participants. ");
+
 				        state = ParticipantAgentState.waiting;
 					}
 				    else {
@@ -388,12 +412,30 @@ public class ParticipantAgent extends Agent {
 				msg = myAgent.receive(mt);
 				if (msg != null) {
 					if (msg.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {
-						System.out.println(getAID().getLocalName()+": accepted.");	
+						System.out.println(msg.getSender().getLocalName()+": sent accepted to "+ getAID().getLocalName());	
 						// get the last not null element of asked_hours and only first participant can send it to schedularAgent because other participants did not make a contact with schedularAgent
 					
 						state = ParticipantAgentState.done;
 						System.out.println(getAID().getLocalName()+": is "+state+".");	
 	
+					}
+					else if (msg.getPerformative() == ACLMessage.REFUSE) {
+						String jsonString = msg.getContent();
+						JSONParser parser = new JSONParser();	
+						JSONObject json = null;
+						try
+						{
+							json = (JSONObject) parser.parse(jsonString);
+						} 
+						catch (ParseException e)
+						{
+							e.printStackTrace();
+						}
+						
+						System.out.println(msg.getSender().getLocalName()+": sent refused to "+ getAID().getLocalName()+"\ngot json: "+json);	
+						
+						// we have new asked hour array, we get new suggested hour and send new message to other participants
+						// state=particapantAgentState.negotiating
 					}
 					else
 					{
