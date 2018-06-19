@@ -27,28 +27,25 @@ public class SchedulerAgent extends Agent {
   //list of found sellers
   private AID[] participantAgents;
   
-	protected void setup() {
-	  targetBookTitle = "";
-	  System.out.println("Hello! " + getAID().getLocalName() + " is ready for the purchase order.");
+  protected void setup() {
+	  System.out.println("||SchedulerAgent||-> " + getAID().getLocalName() + " is ready to contact the participant agents.\n");
 	  myGui = new SchedulerGui(this);
 	  myGui.display();
 		//time interval for buyer for sending subsequent CFP
 		//as a CLI argument
 		//int interval = 20000;
-		Object[] args = getArguments();
-		//if (args != null && args.length > 0) interval = Integer.parseInt(args[0].toString());
+	  Object[] args = getArguments();
+	  //if (args != null && args.length > 0) interval = Integer.parseInt(args[0].toString());
 	  addBehaviour(new TickerBehaviour(this, 1000)
 	  {
 		  protected void onTick()
 		  {
-			  //search only if the purchase task was ordered
 			myAgent.addBehaviour(new RequestPerformer());
- 
 		  }
 	  });
-  }
+	}
 
-	//invoked from GUI, when purchase was ordered
+	//invoked from GUI, when schedule button is pressed
 	public void initiateNegotiation(final boolean schedule_is_pressed)
 	{
 		addBehaviour(new OneShotBehaviour()
@@ -57,13 +54,13 @@ public class SchedulerAgent extends Agent {
 			{
 				if (schedule_is_pressed){
 					schedule = SchedulingState.initiate;
-					System.out.println("\n\n"+getAID().getLocalName() + ": Schedule button is pressed, notifiying first participant to initiate negotiation. ");
+					System.out.println("\n\n"+getAID().getLocalName() + ": Schedule button is pressed, notifying first participant to initiate negotiation. ");
 					}
 			}
 		});
 	}
 
-    	protected void takeDown() {
+    protected void takeDown() {
 		myGui.dispose();
 		System.out.println("Scheduling agent " + getAID().getLocalName() + " terminated.");
 	}
@@ -76,80 +73,104 @@ public class SchedulerAgent extends Agent {
 	  private int step = 0;
 	  private Integer availableHours[] = { 8, 9, 10, 11, 12};
 	  private Integer[] asked_hours = new Integer[availableHours.length];
-	  //private Integer[] asked_hours = new Integer[availableHours.length];
 	  
-	
-
 	  public void action() {
-		//System.out.println( "step: "+ step);
-	  	//System.out.println( "schedule: "+ schedule);
-	  	if (schedule==null)
+	  	if (schedule == null)
 	    	return;
+	    switch (schedule) 
+	    {
+	    	case initiate:
+	    	//contact first participant agent:
+	    	initiate();
+	    	break;
 
-	    switch (schedule) {
-	    case initiate:
-	      //call for proposal (CFP) to found sellers
-	      
-	       
-				  System.out.println(getAID().getLocalName() + ": notifying first participant.");
-				  //update a list of known sellers (DF)
-				  DFAgentDescription template = new DFAgentDescription();
-				  ServiceDescription sd = new ServiceDescription();
-				  sd.setType("book-selling");
-				  template.addServices(sd);
-				  try
-				  {
-					  DFAgentDescription[] result = DFService.search(myAgent, template);
-					  System.out.println(getAID().getLocalName() + ": the following participants have been found");
-					  participantAgents = new AID[result.length];
-					  for (int i = 0; i < result.length; ++i)
-					  {
-						  participantAgents[i] = result[i].getName();
-						  System.out.println(participantAgents[i].getLocalName());
-					  }
-				  }
-				  catch (FIPAException fe)
-				  {
-					  fe.printStackTrace();
-				  }
+	    	case negotiating:
+	    	negotiate();	
+	    	break;
+	    }        
+	  }
+	
+	  public boolean done() {
+	  	if (step == 2 && bestSeller == null) {
+	  		System.out.println(getAID().getLocalName() + ": " + targetBookTitle + " is not on sale.");
+	  	}
+	    //process terminates here if purchase has failed (title not on sale) or book was successfully bought 
+	    return ((step == 2 && bestSeller == null) || step == 4);
+	  }
 
-				  myAgent.addBehaviour(new RequestPerformer());
+	  public void initiate(){
+	  	System.out.println(getAID().getLocalName() + ": notifying first participant.");
+	  	//update the list of participant agents
+		DFAgentDescription template = new DFAgentDescription();
+		ServiceDescription sd = new ServiceDescription();
+		sd.setType("book-selling");
+		template.addServices(sd);
+		try
+		{
+			DFAgentDescription[] result = DFService.search(myAgent, template);
+			System.out.println(getAID().getLocalName() + ": the following participants have been found");
+			participantAgents = new AID[result.length];
+			for (int i = 0; i < result.length; ++i)
+			{
+				participantAgents[i] = result[i].getName();
+				System.out.println(participantAgents[i].getLocalName());
+			}
+		}
+		catch (FIPAException fe)
+		{
+			fe.printStackTrace();
+		}
+
+		myAgent.addBehaviour(new RequestPerformer());
 			 
 	      
-	      ACLMessage cfp = new ACLMessage(ACLMessage.CFP);
-/*
+	    ACLMessage cfp = new ACLMessage(ACLMessage.CFP);
+		/*
 	      for (int i = 0; i < participantAgents.length; ++i) {
 	        cfp.addReceiver(participantAgents[i]);
 	      }
-*/ 		
+		*/ 		
 		
-		  System.out.println("CFP to " + participantAgents[0].getLocalName() + ".");
+		System.out.println("CFP to " + participantAgents[0].getLocalName() + ":");
 
-	      cfp.addReceiver(participantAgents[0]);
+	    cfp.addReceiver(participantAgents[0]);
 
-	      JSONObject obj = new JSONObject();
-	      //JSONArray arr = new JSONArray();
-		  //arr.put(new Integer[] { 8, 9, 10});
-		  //obj.put("availableHours", new JSONArray(new Integer[] { 8, 9, 10} ));
+	    JSONObject obj = new JSONObject();
+	    //JSONArray arr = new JSONArray();
+		//arr.put(new Integer[] { 8, 9, 10});
+		//obj.put("availableHours", new JSONArray(new Integer[] { 8, 9, 10} ));
 		  
-		  obj.put("availableHours", Arrays.asList(availableHours));
-		  obj.put("asked_hours", Arrays.asList(asked_hours));
-		  //System.out.println(obj);
+		obj.put("availableHours", Arrays.asList(availableHours));
+		obj.put("asked_hours", Arrays.asList(asked_hours));
 	      
-	      String jsonText = obj.toString();
-	      System.out.println(jsonText);
+	    String jsonText = obj.toString();
+	    System.out.println(jsonText);
 	      
-	      cfp.setContent(jsonText);
-	      cfp.setConversationId("book-trade");
-	      cfp.setReplyWith("cfp"+System.currentTimeMillis()); //unique value
-	      myAgent.send(cfp);
-	      mt = MessageTemplate.and(MessageTemplate.MatchConversationId("book-trade"),
+	    cfp.setContent(jsonText);
+	    cfp.setConversationId("schedule-start");
+	    cfp.setReplyWith("cfp"+System.currentTimeMillis()); //unique value
+	    myAgent.send(cfp);
+	    mt = MessageTemplate.and(MessageTemplate.MatchConversationId("schedule-start"),
 	                               MessageTemplate.MatchInReplyTo(cfp.getReplyWith()));
 	      
-	      schedule = SchedulingState.negotiating;
-	      //step = 1;
-	      break;
-	    //case 1:
+	    schedule = SchedulingState.negotiating;
+	  }
+
+	  public void negotiate(){
+	  	ACLMessage reply = myAgent.receive(mt);
+	    if (reply != null && reply.getPerformative() == ACLMessage.INFORM) {
+	    	//schedulling informed
+	    	//Retrieve schedulled hour and remove it from available hours, and then print the array
+	    	myAgent.doDelete();
+	    }
+	    else{
+	    	block(10000);
+	    }
+	  }
+	}
+}
+
+//case 1:
 	      //collect proposals
 /*
 	      ACLMessage reply = myAgent.receive(mt);
@@ -212,16 +233,3 @@ public class SchedulerAgent extends Agent {
 
 	      break;
 	    */
-	    }        
-	  }
-	
-	  public boolean done() {
-	  	if (step == 2 && bestSeller == null) {
-	  		System.out.println(getAID().getLocalName() + ": " + targetBookTitle + " is not on sale.");
-	  	}
-	    //process terminates here if purchase has failed (title not on sale) or book was successfully bought 
-	    return ((step == 2 && bestSeller == null) || step == 4);
-	  }
-	}
-
-}
