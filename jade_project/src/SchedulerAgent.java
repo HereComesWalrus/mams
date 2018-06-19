@@ -37,13 +37,60 @@ public class SchedulerAgent extends Agent {
 		//int interval = 20000;
 		Object[] args = getArguments();
 		//if (args != null && args.length > 0) interval = Integer.parseInt(args[0].toString());
-	  addBehaviour(new TickerBehaviour(this, 5000)
+	  addBehaviour(new TickerBehaviour(this, 1000)
 	  {
 		  protected void onTick()
 		  {
 			  //search only if the purchase task was ordered
-			  if (schedule == SchedulingState.initiate)
-			  {
+			myAgent.addBehaviour(new RequestPerformer());
+ 
+		  }
+	  });
+  }
+
+	//invoked from GUI, when purchase was ordered
+	public void initiateNegotiation(final boolean schedule_is_pressed)
+	{
+		addBehaviour(new OneShotBehaviour()
+		{
+			public void action()
+			{
+				if (schedule_is_pressed){
+					schedule = SchedulingState.initiate;
+					System.out.println("\n\n"+getAID().getLocalName() + ": Schedule button is pressed, notifiying first participant to initiate negotiation. ");
+					}
+			}
+		});
+	}
+
+    	protected void takeDown() {
+		myGui.dispose();
+		System.out.println("Scheduling agent " + getAID().getLocalName() + " terminated.");
+	}
+  
+	private class RequestPerformer extends Behaviour {
+	  private AID bestSeller;
+	  private int bestPrice;
+	  private int repliesCnt = 0;
+	  private MessageTemplate mt;
+	  private int step = 0;
+	  private Integer availableHours[] = { 8, 9, 10, 11, 12};
+	  private Integer[] asked_hours = new Integer[availableHours.length];
+	  //private Integer[] asked_hours = new Integer[availableHours.length];
+	  
+	
+
+	  public void action() {
+		//System.out.println( "step: "+ step);
+	  	//System.out.println( "schedule: "+ schedule);
+	  	if (schedule==null)
+	    	return;
+
+	    switch (schedule) {
+	    case initiate:
+	      //call for proposal (CFP) to found sellers
+	      
+	       
 				  System.out.println(getAID().getLocalName() + ": notifying first participant.");
 				  //update a list of known sellers (DF)
 				  DFAgentDescription template = new DFAgentDescription();
@@ -67,50 +114,15 @@ public class SchedulerAgent extends Agent {
 				  }
 
 				  myAgent.addBehaviour(new RequestPerformer());
-			  }
-		  }
-	  });
-  }
-
-	//invoked from GUI, when purchase was ordered
-	public void initiateNegotiation(final boolean schedule_is_pressed)
-	{
-		addBehaviour(new OneShotBehaviour()
-		{
-			public void action()
-			{
-				if (schedule_is_pressed){
-					schedule = SchedulingState.initiate;
-					System.out.println(getAID().getLocalName() + ": Schedule button is pressed, notifiying first participant to initiate negotiation. ");
-					}
-			}
-		});
-	}
-
-    	protected void takeDown() {
-		myGui.dispose();
-		System.out.println("Scheduling agent " + getAID().getLocalName() + " terminated.");
-	}
-  
-	private class RequestPerformer extends Behaviour {
-	  private AID bestSeller;
-	  private int bestPrice;
-	  private int repliesCnt = 0;
-	  private MessageTemplate mt;
-	  private int step = 0;
-	  private Integer availableHours[] = { 8, 9, 10, 11, 12};
-	  private Integer[] asked_hours = new Integer[availableHours.length];
-	  //private Integer[] asked_hours = new Integer[availableHours.length];
-	  public void action() {
-	    switch (step) {
-	    case 0:
-	      //call for proposal (CFP) to found sellers
+			 
+	      
 	      ACLMessage cfp = new ACLMessage(ACLMessage.CFP);
 /*
 	      for (int i = 0; i < participantAgents.length; ++i) {
 	        cfp.addReceiver(participantAgents[i]);
 	      }
-*/ 			
+*/ 		
+		
 		  System.out.println("CFP to " + participantAgents[0].getLocalName() + ".");
 
 	      cfp.addReceiver(participantAgents[0]);
@@ -135,10 +147,11 @@ public class SchedulerAgent extends Agent {
 	                               MessageTemplate.MatchInReplyTo(cfp.getReplyWith()));
 	      
 	      schedule = SchedulingState.negotiating;
-	      step = 1;
+	      //step = 1;
 	      break;
-	    case 1:
+	    //case 1:
 	      //collect proposals
+/*
 	      ACLMessage reply = myAgent.receive(mt);
 	      if (reply != null) {
 	        if (reply.getPerformative() == ACLMessage.PROPOSE) {
@@ -159,9 +172,12 @@ public class SchedulerAgent extends Agent {
 	      else {
 	        block();
 	      }
+
 	      break;
-	    case 2:
+*/
+/*	    case 2:
 	      //best proposal consumption - purchase
+
 	      ACLMessage order = new ACLMessage(ACLMessage.ACCEPT_PROPOSAL);
           order.addReceiver(bestSeller);
 	      order.setContent(targetBookTitle);
@@ -172,8 +188,10 @@ public class SchedulerAgent extends Agent {
 	                               MessageTemplate.MatchInReplyTo(order.getReplyWith()));
 	      step = 3;
 	      break;
-	    case 3:      
+	      
+/*	    case 3:      
 	      //seller confirms the transaction
+/*
 	      reply = myAgent.receive(mt);
 	      if (reply != null) {
 	        if (reply.getPerformative() == ACLMessage.INFORM) {
@@ -191,7 +209,9 @@ public class SchedulerAgent extends Agent {
 	      else {
 	        block();
 	      }
+
 	      break;
+	    */
 	    }        
 	  }
 	
