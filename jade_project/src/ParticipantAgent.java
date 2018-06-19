@@ -31,7 +31,8 @@ public class ParticipantAgent extends Agent {
 	private double priority = -1.0;
 	private ParticipantAgentState state = ParticipantAgentState.initiated;
 	private AID[] participantAgents;
-
+	private Integer[] asked_hours;
+	private AID schedularAgent;
 
 	private int hourIndex;
 
@@ -44,6 +45,7 @@ public class ParticipantAgent extends Agent {
 		int hour = 0;
 		double priority = 0.0;
 		calendar = new HashMap<Integer, Double>();
+		
 		
 
 		for(int i = 0; i < args.length; i = i+2){
@@ -142,6 +144,7 @@ public class ParticipantAgent extends Agent {
 			
 			if (state == ParticipantAgentState.done)
 			{
+				
 				//System.out.println(getAID().getLocalName()+": is done.");	
 				return true;
 			}
@@ -174,6 +177,7 @@ public class ParticipantAgent extends Agent {
 						if (i==0 && j==0)
 						{
 							state = ParticipantAgentState.firstParticipant;
+							schedularAgent = new AID();
 						}
 						else
 						{
@@ -218,7 +222,7 @@ public class ParticipantAgent extends Agent {
 				System.out.println("received json: \n"+json);//update a list of known sellers (DF)
 				// calculate
 				
-				
+				schedularAgent = msg.getSender();
 				JSONArray availableHours = (JSONArray)json.get("availableHours");
 				
 				JSONArray list = (JSONArray)json.get("asked_hours");
@@ -460,7 +464,38 @@ public class ParticipantAgent extends Agent {
 					// get the last not null element of asked_hours and only first participant can send it to schedularAgent because other participants did not make a contact with schedularAgent
 					
 					state = ParticipantAgentState.done;
-					System.out.println(getAID().getLocalName()+": is "+state+".");	
+					System.out.println(getAID().getLocalName()+": is "+state+".");
+					
+					
+					// Only the first participant can send it
+					if (schedularAgent != null) {
+						// WE NEED TO RETRIEVE THE COMMMON HOUR HERE :
+					
+					// int i = 0;
+					// while(asked_hours[i] != null)
+					// i++;
+					
+					// int hour = Integer.parseInt(String.valueOf(asked_hours[i]));
+					int hour = 12;
+					
+					
+					// MESSAGE DONE TO SCHEDULE AGENT
+
+					ACLMessage doneMessage = new ACLMessage(ACLMessage.INFORM);
+					
+					JSONObject obj = new JSONObject();
+					obj.put("commonAvailableHour", hour);
+					String jsonString = obj.toString();
+					
+					doneMessage.setPerformative(ACLMessage.INFORM);
+					doneMessage.setContent(jsonString);
+					doneMessage.setConversationId("participant-negotiation");
+					doneMessage.setReplyWith("done"+System.currentTimeMillis()); //unique value
+					doneMessage.addReceiver(schedularAgent);
+					myAgent.send(doneMessage);
+					}
+					
+					
 					
 				}
 				else if (msg.getPerformative() == ACLMessage.REFUSE) {
