@@ -14,6 +14,11 @@ import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
 import java.util.Arrays;
 
+import org.json.simple.JSONObject;
+import org.json.simple.*;
+import org.json.simple.parser.*;
+
+
 enum SchedulingState
 {
     waiting, initiate, negotiating, BLUE;
@@ -157,11 +162,56 @@ public class SchedulerAgent extends Agent {
 	  }
 
 	  public void negotiate(){
-	  	ACLMessage reply = myAgent.receive(mt);
-	    if (reply != null && reply.getPerformative() == ACLMessage.INFORM) {
+	  	ACLMessage reply = myAgent.receive();
+	    if (reply != null && reply.getPerformative() == ACLMessage.CFP) {
 	    	//schedulling informed
 	    	//Retrieve schedulled hour and remove it from available hours, and then print the array
-	    	myAgent.doDelete();
+	    	System.out.println("\n\nGERONIMOOO !!\nSchedulerAgent got: "+reply.getContent());
+	    	
+	    	
+	    	String jsonString = reply.getContent();
+			JSONParser parser = new JSONParser();	
+			JSONObject json = null;
+			try
+			{
+				json = (JSONObject) parser.parse(jsonString);
+			} 
+			catch (ParseException e)
+			{
+				e.printStackTrace();
+			}
+
+						    
+			JSONArray asked_hours = (JSONArray)json.get("asked_hours");
+					   						
+			int meeting_hour=-1;
+						
+			for(int i = 0; i < asked_hours.size(); i++) 
+			{
+				if (asked_hours.get(i)== null)
+				{
+					if ( i!=0 && asked_hours.get((i-1)) != null)
+					{
+						meeting_hour = Integer.parseInt(String.valueOf(asked_hours.get(i-1)));
+					}
+				}
+				else if (i == asked_hours.size()-1)
+				
+					meeting_hour = Integer.parseInt(String.valueOf(asked_hours.get(i-1)));
+			}
+			
+			
+			for(int i = 0; i < availableHours.length; i++) 
+			{
+				if (meeting_hour==availableHours[i])
+					availableHours[i] = null;
+			}
+			
+			
+			System.out.println("\n\nMeeting hour is set to :: "+meeting_hour);
+			
+	    	
+	    	//myAgent.doDelete();
 	    }
 	    else{
 	    	block(10000);

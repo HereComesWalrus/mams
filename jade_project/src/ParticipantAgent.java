@@ -15,199 +15,151 @@ import org.json.simple.JSONObject;
 import org.json.simple.*;
 import org.json.simple.parser.*;
 
-
+import java.util.Arrays;
 
 enum ParticipantAgentState
 {
-	initiated, firstParticipant, negotiating, waiting, done;
+    initiated, firstParticipant, negotiating, waiting, informing, done;
 }
 
 
 
 public class ParticipantAgent extends Agent {
-	private ParticipantGui myGui;
+  private ParticipantGui myGui;
+  
+  private HashMap<Integer, Double> calendar;
+  private double priority = -1.0;
+  private ParticipantAgentState state = ParticipantAgentState.initiated;
+  private AID[] participantAgents;
 
-	private HashMap<Integer, Double> calendar;
-	private double priority = -1.0;
-	private ParticipantAgentState state = ParticipantAgentState.initiated;
-	private AID[] participantAgents;
-	private Integer[] asked_hours;
-	private AID schedularAgent;
+  private int hourIndex;
+  private int acceptCount = 0;
+  
+  private ACLMessage replySchedulerAgent=null;
 
-	private int hourIndex;
 
-	protected void setup() {
-		// catalogue = new Hashtable();
-		myGui = new ParticipantGui(this);
-		myGui.display();
-		
-		Object[] args = getArguments();
-		int hour = 0;
-		double priority = 0.0;
-		calendar = new HashMap<Integer, Double>();
-		
-		
+  protected void setup() {
+   // catalogue = new Hashtable();
+    myGui = new ParticipantGui(this);
+    myGui.display();
+    
+	Object[] args = getArguments();
+	int hour = 0;
+	double priority = 0.0;
+	calendar = new HashMap<Integer, Double>();
+	
 
-		for(int i = 0; i < args.length; i = i+2){
+	for(int i = 0; i < args.length; i = i+2){
 			if (args != null && args.length > 0) hour = Integer.parseInt(args[i].toString());
 			if (args != null && args.length > 0) priority = Double.valueOf(args[i+1].toString());
 			calendar.put(hour, priority);
 		}
 		System.out.println(getAID().getLocalName() + " is initiated.");
 		for(Object key:calendar.keySet()) {
-			System.out.println("hour: "+key+ "\t-\t"+ calendar.get(key));
-		}	
-		System.out.println("\n");
+		   System.out.println("hour: "+key+ "\t-\t"+ calendar.get(key));
+		 }	
+	System.out.println("\n");
 
-		//book selling service registration at DF
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sd = new ServiceDescription();
-		sd.setType("book-selling");
-		sd.setName("JADE-book-trading");
-		dfd.addServices(sd);
-		try {
-			DFService.register(this, dfd);
-		}
-		catch (FIPAException fe) {
-			fe.printStackTrace();
-		}
-		
+    //book selling service registration at DF
+    DFAgentDescription dfd = new DFAgentDescription();
+    dfd.setName(getAID());
+    ServiceDescription sd = new ServiceDescription();
+    sd.setType("book-selling");
+    sd.setName("JADE-book-trading");
+    dfd.addServices(sd);
+    try {
+      DFService.register(this, dfd);
+    }
+    catch (FIPAException fe) {
+      fe.printStackTrace();
+    }
+    
 
-		
-		addBehaviour(new TickerBehaviour(this, 1000)
-		{
-			protected void onTick()
-			{
-				//search only if the purchase task was ordered
-				myAgent.addBehaviour(new OfferRequestsServer());
-				
-			}
-		});
-		//addBehaviour(new OfferRequestsServer());
+    
+    addBehaviour(new TickerBehaviour(this, 1000)
+	  {
+		  protected void onTick()
+		  {
+			myAgent.addBehaviour(new OfferRequestsServer());
+			  
+		  }
+	  });
 
-	}
+  }
 
-	protected void takeDown() {
-		//book selling service deregistration at DF
-		try {
-			DFService.deregister(this);
-		}
-		catch (FIPAException fe) {
-			fe.printStackTrace();
-		}
-		myGui.dispose();
-		System.out.println("Paricipant agent " + getAID().getName() + " terminated.");
-	}
-
-	//invoked from GUI, when a new book is added to the catalogue
-
-	public void updateCatalogue(final String title, final int price) {
-		addBehaviour(new OneShotBehaviour() {
-			public void action() {
-				//catalogue.put(title, new Integer(price));
-				System.out.println(getAID().getLocalName() + ": " + title + " put into the catalogue. Price = " + price);
-			}
-		} );
-	}
+  protected void takeDown() {
+    try {
+      DFService.deregister(this);
+    }
+    catch (FIPAException fe) {
+      fe.printStackTrace();
+    }
+  	myGui.dispose();
+    System.out.println("Paricipant agent " + getAID().getName() + " terminated.");
+  }
 
 
 	private class OfferRequestsServer extends Behaviour {
-		
-		ACLMessage msg;
-		MessageTemplate mt;
-		private ACLMessage replySchedulerAgent;
-
-		public void action() {
-			//proposals only template
-			//System.out.println("before switch: "+ state);//update a list of known sellers (DF)
-			switch(state)
-			{   
-			case initiated:  
-				initiate();
-				break;
-				
-			case firstParticipant:
-				firstParticipant();
-				break;
-				//myAgent.send(replySchedulerAgent);
-			case negotiating: 
-				negotiating();
-				break;
-			case waiting:
-				waiting();
-				break;
-			}
-		}
-		
-		public boolean done() {
-			
-			if (state == ParticipantAgentState.done)
-			{
-				
-				//System.out.println(getAID().getLocalName()+": is done.");	
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
-		public void initiate(){
-			DFAgentDescription template = new DFAgentDescription();
-			ServiceDescription sd = new ServiceDescription();
-			sd.setType("book-selling");
-			template.addServices(sd);
-			try{
-				DFAgentDescription[] result = DFService.search(myAgent, template);
-				System.out.println(getAID().getLocalName() + ": the following participants have been found");
-				participantAgents = new AID[result.length - 1];
-				int i=0; int j=0;
-				while (i < result.length)
-				{
-
-					if (!String.valueOf(result[i].getName()).equals(String.valueOf(getAID())))
+	
+	  ACLMessage msg;
+	  MessageTemplate mt;
+	  
+	  private boolean contains(Integer[] arr, Integer item) {
+      return Arrays.stream(arr).anyMatch(item::equals);
+	  }
+	  
+	  public void action() {
+	  
+		msg = myAgent.receive();
+		if (msg != null || state == ParticipantAgentState.initiated )
+		{
+			 
+			if (state == ParticipantAgentState.initiated )
+			{  
+				DFAgentDescription template = new DFAgentDescription();
+				ServiceDescription sd = new ServiceDescription();
+				sd.setType("book-selling");
+				template.addServices(sd);
+				try{
+					DFAgentDescription[] result = DFService.search(myAgent, template);
+					System.out.println(getAID().getLocalName() + ": the following participants have been found");
+					participantAgents = new AID[result.length - 1];
+					int i=0; int j=0;
+					while (i < result.length)
 					{
-						participantAgents[j] = result[i].getName();
-						System.out.println("test "+ participantAgents[j].getLocalName());
-						j++;
-					}
-					else
-					{
-						if (i==0 && j==0)
+						if (!String.valueOf(result[i].getName()).equals(String.valueOf(getAID())))
 						{
-							state = ParticipantAgentState.firstParticipant;
-							schedularAgent = new AID();
+							participantAgents[j] = result[i].getName();
+							System.out.println("test "+ participantAgents[j].getLocalName());
+							j++;
 						}
 						else
 						{
-							state = ParticipantAgentState.negotiating;
-							mt = MessageTemplate.MatchPerformative(ACLMessage.PROPOSE);
+							if (i==0 && j==0)
+							{
+						   		state = ParticipantAgentState.firstParticipant;
+							}
+							else
+							{
+								state = ParticipantAgentState.negotiating;
+							}
 						}
+						i++;
+
 					}
-					i++;
 
 				}
-				/*
-					for (int i = 0; i < result.length; ++i){
-						participantAgents[i] = result[i].getName();
-						System.out.println("test "+ participantAgents[i].getLocalName());
-					}	
-*/		    	
-			}
-			catch (FIPAException fe){
-				System.out.println("catch running !! "+ getAID().getLocalName());
+				catch (FIPAException fe){
+					System.out.println("catch running !! "+ getAID().getLocalName());
 
-				fe.printStackTrace();
+					fe.printStackTrace();
+				}
+			
 			}
-		}
-		
-		public void firstParticipant() {
-			mt = MessageTemplate.MatchPerformative(ACLMessage.CFP);
-			msg = myAgent.receive(mt);
-			if (msg != null) {
-				String jsonString = msg.getContent();
-				JSONParser parser = new JSONParser();		
+		    else if (state == ParticipantAgentState.firstParticipant && msg.getPerformative() == ACLMessage.CFP )
+			{
+			      String jsonString = msg.getContent();
+			      JSONParser parser = new JSONParser();		
 				//convert from JSON string to JSONObject
 				JSONObject json = null;
 				try
@@ -218,98 +170,84 @@ public class ParticipantAgent extends Agent {
 				{
 					e.printStackTrace();
 				}
-				
-				System.out.println("received json: \n"+json);//update a list of known sellers (DF)
+			    
+			    System.out.println("received json from SchedularAgent: \n"+json);//update a list of known sellers (DF)
 				// calculate
-				
-				schedularAgent = msg.getSender();
-				JSONArray availableHours = (JSONArray)json.get("availableHours");
-				
-				JSONArray list = (JSONArray)json.get("asked_hours");
+			    
+			    
+			    JSONArray availableHours = (JSONArray)json.get("availableHours");
+			    
+			    JSONArray list = (JSONArray)json.get("asked_hours");
 				Integer[] asked_hours = new Integer[list.size()];
 				for(int i = 0; i < list.size(); i++) 
 				{
 					if (list.get(i)!=null)
-					asked_hours[i] = Integer.valueOf(String.valueOf(list.get(i)));
+						asked_hours[i] = Integer.valueOf(String.valueOf(list.get(i)));
 					else
-					asked_hours[i] = null;
+						asked_hours[i] = null;
 				}
 				//for (int i=0; i<asked_hours.length;i++)
 				//	System.out.print("asked_hours[i]: "+ asked_hours[i]);
 
 				//	System.out.print("\n");
-				
-				for(Object key:calendar.keySet()) 
-				{
-					if (priority < calendar.get(key))
-					{
+					
+			    for(Object key:calendar.keySet()) 
+			    {
+				    if (priority < calendar.get(key))
+				    {
 						for (int i = 0; i < availableHours.size(); i++)
-						if (!String.valueOf(key).equals(String.valueOf(asked_hours[i])) && String.valueOf(availableHours.get(i)).equals(String.valueOf(key)))
-						{
-							priority = calendar.get(key);
-							hourIndex = Integer.parseInt(String.valueOf(key));
-						}
-					}
+						  if (!String.valueOf(key).equals(String.valueOf(asked_hours[i])) && String.valueOf(availableHours.get(i)).equals(String.valueOf(key)))
+						  {
+						  	priority = calendar.get(key);
+						  	hourIndex = Integer.parseInt(String.valueOf(key));
+						  }
+					  }
 				}
-				
 				
 				int i = 0;
 				while(asked_hours[i] != null)
-				i++;
+					i++;
 				
 				asked_hours[i]=hourIndex;
-				System.out.println("asked["+i+"]: "+asked_hours[i]);
 				//asked_hours.put(i, Integer.parseInt(String.valueOf(availableHours.get(hourIndex))));
 				
-				
 				if (priority >=0.5){ // we need it for the first time
+					
+					System.out.println(getAID().getLocalName()+" will propose hour: "+asked_hours[i]);
+
 					ACLMessage propose = new ACLMessage(ACLMessage.PROPOSE);
 					
 					
 					for (i = 0; i < participantAgents.length; ++i) {
 						propose.addReceiver(participantAgents[i]);
+						System.out.println(getAID().getLocalName()+": first participant adding receiver as "+participantAgents[i].getLocalName() );
 					}
+					
 					JSONObject obj = new JSONObject();
 					obj.put("availableHours", availableHours);
 					obj.put("asked_hours",Arrays.asList(asked_hours));
 					jsonString = obj.toString();
-					System.out.println("proposing asked hour in the json file to other participants:"+jsonString);
-					
-					propose.setPerformative(ACLMessage.PROPOSE);
-					propose.setContent(jsonString);
-					propose.setConversationId("participant-negotiation");
-					propose.setReplyWith("propose"+System.currentTimeMillis()); //unique value
-					myAgent.send(propose);
-					
-					mt = MessageTemplate.MatchPerformative(ACLMessage.PROPOSE);
-
-					//mt = MessageTemplate.and(MessageTemplate.MatchConversationId("participant-negotiation"),
-					//MatchPerformative(ACLMessage.PROPOSE));
-					
-					System.out.println(getAID().getLocalName() + ": Send propasals. ");
-					System.out.println("highest: "+ priority);
+					System.out.println(getAID().getLocalName()+": first participant proposes other participants:"+jsonString);
+	      
+				    propose.setPerformative(ACLMessage.PROPOSE);
+				    propose.setContent(jsonString);
+				    propose.setConversationId("participant-negotiation");
+				    propose.setReplyWith("propose"+System.currentTimeMillis()); //unique value
+				    myAgent.send(propose);
+				    
 					replySchedulerAgent = msg.createReply();	      
 				}else{
 					//priority=-1;
 					//  participant not available !! 	
+					System.out.println(getAID().getLocalName()+": firstParticipant priority is less than 0.5 => "+ priority);
+
 				} 			
-				
-				state = ParticipantAgentState.waiting;
+			      
+			    state = ParticipantAgentState.negotiating;
 
-			}			
-			else {
-				block();
-			}
-		}
-		
-		public void negotiating() {
-			mt = MessageTemplate.MatchPerformative(ACLMessage.PROPOSE);
-
-			msg = myAgent.receive(mt);
-
-			if (msg != null) {
-				//  if (msg.getPerformative() != ACLMessage.PROPOSE) {System.out.println("wth msg.getPerformative: "+msg.getPerformative());}
-
+			    }			
+			else if (msg.getPerformative() == ACLMessage.PROPOSE && state == ParticipantAgentState.negotiating) 
+			{
 				String jsonString = msg.getContent();
 				JSONParser parser = new JSONParser();	
 				JSONObject json = null;
@@ -322,237 +260,256 @@ public class ParticipantAgent extends Agent {
 					e.printStackTrace();
 				}
 
-				System.out.println(getAID().getLocalName()+": got from " +msg.getSender().getLocalName()+json);
-				
-				// Alexis's PART 
-				// JSONArray list = (JSONArray)json.get("asked_hours");
-				
-				// int i = 0;
-				// while (list.get(i) == null) {
-				// i++;
-				// }
-				
-				// long currentAskedHour = (long) list.get(i);
-				// if (calendar.get(currentAskedHour) > 0.5) {
-				// System.out.println("jsuis chaud");
-				// } else {
-				// System.out.println("nope");
-				// }	
-				// There IS A NULL EXPECTION ERROR HERE SO ITS NORMAL
-				// --------
-				
-				
-				// look for priority and do neccassary calc.
-				// if it is not available, send 1st participant a message that the xx participant not available 
-				// if even one participant not available for entire day, send message to SchedularAgent through first participant that the meeting can not be set.
-				
+				System.out.println(getAID().getLocalName()+": proposed by " +msg.getSender().getLocalName()+json);
+						
+						// look for priority and do neccassary calc.
+						// if it is not available, send 1st participant a message that the xx participant not available 
+						// if even one participant not available for entire day, send message to SchedularAgent through first participant that the meeting can not be set.
+					
 				JSONArray availableHours = (JSONArray)json.get("availableHours");
-				
-				JSONArray list = (JSONArray)json.get("asked_hours");
-				System.out.println("availableHours: "+ availableHours+"\n");
-				
-				System.out.println("asked_hours: "+ list+"\n");
-
-				
-				
+					    
+			    JSONArray list = (JSONArray)json.get("asked_hours");
+					   						
 				Integer[] asked_hours = new Integer[list.size()];
-				
-				
+						
+				double new_priority=-2;
+
 				for(int i = 0; i < list.size(); i++) 
 				{
 					if (list.get(i)!=null)
-					asked_hours[i] = Integer.valueOf(String.valueOf(list.get(i)));
-					else{
+						asked_hours[i] = Integer.valueOf(String.valueOf(list.get(i)));
+					else
+					{
 						asked_hours[i] = null;
 						if (asked_hours[i-1] != null)
 						{
-							priority = calendar.get(Integer.parseInt(String.valueOf(asked_hours[i-1])));	
-							System.out.println("priority is set to "+ priority+"\n");
-
+							new_priority = calendar.get(Integer.parseInt(String.valueOf(asked_hours[i-1])));
 						}
 					}
 				}
-				
-				
+						
+						
 				ACLMessage reply = msg.createReply();
 				reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
-				
-				for (int i = 0; i < participantAgents.length; ++i) {
-					System.out.println(getAID().getLocalName()+": adding receiver-> "+ participantAgents[i].getLocalName());
-
-					reply.addReceiver(participantAgents[i]);
-				}
-				
-				if (priority >= 0.5)
+			
+				if(
+					(priority == -1 && new_priority >= 0.5) ||
+					(priority != -1 && new_priority > priority ) ||
+					( (priority != -1 && new_priority != -2) &&
+					 (new_priority <= priority) && 
+					(0.0 <= priority-new_priority && priority-new_priority <= 0.5) )
+				)
 				{
-					
-					JSONObject obj = new JSONObject();
-					obj.put("availableHours", availableHours);
-					obj.put("asked_hours",Arrays.asList(asked_hours));
-					jsonString = obj.toString();
-					System.out.println("accept_proposal asked hour :"+jsonString);
-					
-					reply.setContent(jsonString);
-					reply.setConversationId("participant-accept");
-					
-					mt = MessageTemplate.and(MessageTemplate.MatchConversationId("participant-accept"),
-					MessageTemplate.MatchInReplyTo(reply.getReplyWith()));
-					
-					System.out.println(getAID().getLocalName() + ": Send accept_propasals. ");
-					//myAgent.send(reply);	
+							
+				if(  (priority == -1) || (new_priority > priority) )
+					{priority = new_priority;}
+						
+				JSONObject obj = new JSONObject();
+				obj.put("availableHours", availableHours);
+				obj.put("asked_hours",Arrays.asList(asked_hours));
+				jsonString = obj.toString();
+	      
+				reply.setContent(jsonString);
+				reply.setConversationId("participant-accept");
+				    				     
+				System.out.println(getAID().getLocalName() + ": Send accept_propasals. ");
+				        //state = ParticipantAgentState.waiting;
 					
 				}
 				else
 				{	// that hour is not available for participant, suggesting a new one
+					
+					/*
+if (asked_hours[asked_hours.length-1] != null)
+					{
+						System.out.println(getAID().getLocalName()+": list has not an empty spot.");
+						return;
+					}
+*/	
+					reply = new ACLMessage(ACLMessage.PROPOSE);
+
+					System.out.println(getAID().getLocalName()+": refused. sending new propose.");
+					for (int i = 0; i < participantAgents.length; ++i)
+					{
+						reply.addReceiver(participantAgents[i]);
+						System.out.println(getAID().getLocalName()+": adding receiver to new propose-> "+ participantAgents[i].getLocalName());
+					}
+
+					
+					state = ParticipantAgentState.negotiating;
+							
 					for(Object key:calendar.keySet()) 
 					{
-						if (priority < calendar.get(Integer.parseInt(String.valueOf(key))))
+						double value = calendar.get(Integer.parseInt(String.valueOf(key)));
+						int hour = Integer.parseInt(String.valueOf(key));						
+						
+						if (list.contains(hour) == false && contains(asked_hours, hour) == false )
 						{
-							for (int i = 0; i < availableHours.size(); i++)
-							if (!String.valueOf(key).equals(String.valueOf(asked_hours[i])) && String.valueOf(availableHours.get(i)).equals(String.valueOf(key)))
+							System.out.println(getAID().getLocalName()+": priority: "+ priority+" list doesnt contains: "+hour+ " (wtf list[1]:"+list.get(1)+") priority: "+ value + "  new_priority:"+ new_priority);
+
+							System.out.println(getAID().getLocalName()+": list: "+list);
+
+							if (priority < value && value >= 0.5)
 							{
-								priority = calendar.get(Integer.parseInt(String.valueOf(key)));
-								hourIndex = Integer.parseInt(String.valueOf(key));
+								priority = value;
+								System.out.println(getAID().getLocalName()+"priority set to : "+priority+ " from hour: "+hour);
+								int i = 0;
+						    	while (i < asked_hours.length)
+								{
+									if (asked_hours[i] == null)
+									{
+										asked_hours[i] = hour; 
+										System.out.println(getAID().getLocalName()+"new suggested hour: "+asked_hours[i] +" asked_hours:"+Arrays.asList(asked_hours));
+										break;
+									 }
+									 else {i++;}	 
+								}
+								break;
+						    }
+							else if (priority != -1 && priority >= value && priority - value<= 0.5)
+							{
+								//if (asked_hours[i] == hour)
+
+								int i = 0;
+								while (i < asked_hours.length)
+								{
+									if (asked_hours[i] == null)
+									{
+									asked_hours[i] = hour; 
+									System.out.println(getAID().getLocalName()+": difference accaptable :"+ String.valueOf(priority - value) + " new suggested hour: "+hour+" asked_hours:"+Arrays.asList(asked_hours));
+									break;
+									}
+									else {i++;}	 
+								}
+								break;
+							}
+							else if (priority - value> 0.5)
+							{
+								System.out.println(getAID().getLocalName()+": difference huge :"+ String.valueOf(priority - value) + "  hour: "+hour +" priority:"+priority+" value:"+value );
+
 							}
 						}
-					}
-					
-					
-					int i = 0;
-					while(asked_hours[i] != null)
-					i++;
-					
-					asked_hours[i]=hourIndex;
-					
-					// we should add new info to reply.setContent() also we should re-initiate negotitation phase 							
+					}	
+						
+					acceptCount=0;	
 					JSONObject obj = new JSONObject();
 					obj.put("availableHours", availableHours);
 					obj.put("asked_hours",Arrays.asList(asked_hours));
 					jsonString = obj.toString();
 					
 					reply.setContent(jsonString);
-
-					reply.setPerformative(ACLMessage.REFUSE);
-					reply.setConversationId("participant-refused");
-					mt = MessageTemplate.and(MessageTemplate.MatchConversationId("participant-refused"),
-					MessageTemplate.MatchInReplyTo(reply.getReplyWith()));
+							
+					reply.setPerformative(ACLMessage.PROPOSE);
+					reply.setConversationId("participant-negotiation");
+					reply.setReplyWith("propose"+System.currentTimeMillis()); //unique value
 					
-					System.out.println(getAID().getLocalName() + ": Send REFUSED.\n"+jsonString);
+				         	
+					System.out.println(getAID().getLocalName()+" acceptCount is reset.");
 
+					System.out.println(getAID().getLocalName() + ": Send new PROPOSE to other participants.\n"+jsonString);
+						 	
+					state = ParticipantAgentState.negotiating;
 				}
-				
-				//*/											
-				System.out.println("highest: "+ priority);
+							
+
 				reply.setReplyWith("reply"+System.currentTimeMillis()); //unique value
-				myAgent.send(reply);
+		    	myAgent.send(reply);
+			}	  
+			else if (msg.getPerformative() == ACLMessage.ACCEPT_PROPOSAL)
+			{
+				System.out.println("\nn"+msg.getSender().getLocalName()+": accepted proposal by "+getAID().getLocalName() +"got json: "+msg.getContent()+"\n");	
+						// get the last not null element of asked_hours and only first participant can send it to schedularAgent because other participants did not make a contact with schedularAgent
+					
+						//state = ParticipantAgentState.done;
+						//System.out.println(getAID().getLocalName()+": is "+state+".");	
+				acceptCount++;
+				System.out.println(getAID().getLocalName()+" acceptCount is increased to "+acceptCount);
 
-				System.out.println(getAID().getLocalName()+": priority-> "+ priority+"\n");
-				System.out.println(getAID().getLocalName() + ": Send refused to other participants. ");
-
-				state = ParticipantAgentState.waiting;
-			}
-			else {
-				block();
-			}
-		}
-		
-		public void waiting() {
-			msg = myAgent.receive(mt);
-			if (msg != null) {
-				if (msg.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {
-					System.out.println(msg.getSender().getLocalName()+": sent accepted to "+ getAID().getLocalName());	
-					// get the last not null element of asked_hours and only first participant can send it to schedularAgent because other participants did not make a contact with schedularAgent
-					
-					state = ParticipantAgentState.done;
-					System.out.println(getAID().getLocalName()+": is "+state+".");
-					
-					
-					// Only the first participant can send it
-					if (schedularAgent != null) {
-						// WE NEED TO RETRIEVE THE COMMMON HOUR HERE :
-					
-					// int i = 0;
-					// while(asked_hours[i] != null)
-					// i++;
-					
-					// int hour = Integer.parseInt(String.valueOf(asked_hours[i]));
-					int hour = 12;
-					
-					
-					// MESSAGE DONE TO SCHEDULE AGENT
-
-					ACLMessage doneMessage = new ACLMessage(ACLMessage.INFORM);
-					
-					JSONObject obj = new JSONObject();
-					obj.put("commonAvailableHour", hour);
-					String jsonString = obj.toString();
-					
-					doneMessage.setPerformative(ACLMessage.INFORM);
-					doneMessage.setContent(jsonString);
-					doneMessage.setConversationId("participant-negotiation");
-					doneMessage.setReplyWith("done"+System.currentTimeMillis()); //unique value
-					doneMessage.addReceiver(schedularAgent);
-					myAgent.send(doneMessage);
-					}
-					
-					
-					
-				}
-				else if (msg.getPerformative() == ACLMessage.REFUSE) {
-					String jsonString = msg.getContent();
-					JSONParser parser = new JSONParser();	
-					JSONObject json = null;
-					try
-					{
-						json = (JSONObject) parser.parse(jsonString);
-					} 
-					catch (ParseException e)
-					{
-						e.printStackTrace();
-					}
-					
-					System.out.println(msg.getSender().getLocalName()+": sent refused to "+ getAID().getLocalName()+"\ngot json: "+json);	
-					
-					// we have new asked hour array, we get new suggested hour and send new message to other participants
-					// state=particapantAgentState.negotiating
-				}
-				else
+				if (acceptCount == participantAgents.length)
 				{
-					System.out.println(getAID().getLocalName()+": got this message\n"+msg);	
+					System.out.println(getAID().getLocalName()+" I think now message can be sended to SchedularAgent.(test)");
+					state = ParticipantAgentState.informing;
+					
+					if (replySchedulerAgent == null)
+					{
+						ACLMessage inform = new ACLMessage(ACLMessage.INFORM);
+										
+						inform.setContent(msg.getContent());
+						inform.setConversationId("participant-inform");
+						inform.setReplyWith("inform"+System.currentTimeMillis()); //unique value
+						
+						for(int i=0; i<participantAgents.length;i++)
+							inform.addReceiver(participantAgents[i]);
+						
+						myAgent.send(inform);
+					}
+					else{
+						
+						System.out.println(getAID().getLocalName()+ "is first participant, it will respond back." );
+						replySchedulerAgent.setContent(msg.getContent());
+						myAgent.send(replySchedulerAgent);
+						//myAgent.doDelete();
+					}		
 				}
-			}
-		}
-	}
+				if (acceptCount > participantAgents.length)
+				{
+					acceptCount = 1;
+					System.out.println(getAID().getLocalName()+" acceptCount set to 1.");
+				}
 
+
+			}
+			else if (msg.getPerformative() == ACLMessage.INFORM)
+			{
+				if (replySchedulerAgent != null)
+				{
+					System.out.println(msg.getSender().getLocalName()+ "informed: "+getAID().getLocalName()+" and it will respond back." );	
+					replySchedulerAgent.setContent(msg.getContent());
+					myAgent.send(replySchedulerAgent);	
+					//myAgent.doDelete();	
+				}
 	
-	/*
-	private class ProposeServer extends CyclicBehaviour {
-	public void action() {
-		//purchase order as proposal acceptance only template
-		MessageTemplate mt = MessageTemplate.MatchPerformative(ACLMessage.PROPOSE);
-		ACLMessage msg = myAgent.receive(mt);
-		if (msg != null) {
-		String title = msg.getContent();
-		ACLMessage reply = msg.createReply();
-		Integer price = (Integer) catalogue.remove(title);
-		if (price != null) {
-			reply.setPerformative(ACLMessage.INFORM);
-			System.out.println(getAID().getLocalName() + ": " + title + " sold to " + msg.getSender().getLocalName());
+			}
+			else
+			{
+				System.out.print("\n\n\n\n"+getAID().getLocalName()+": got this message from "+ msg.getSender().getLocalName()+"\n"+msg+"\n\n\n\n");
+			}		
+	 
+	    }	
+		else if (state == ParticipantAgentState.waiting)
+		{
+			//System.out.println(getAID().getLocalName()+": is waiting without getting message.");	
+		}	
+		else if (state == ParticipantAgentState.done)
+		{
+			System.out.println(getAID().getLocalName()+": is done. without getting message.");	
 		}
-		else {
-			//title not found in the catalogue, sold to another agent in the meantime (after proposal submission)
-			reply.setPerformative(ACLMessage.FAILURE);
-			reply.setContent("not-available");
+
+		/*
+try        
+		{
+		    Thread.sleep(1000);
+		} 
+		catch(InterruptedException ex) 
+		{
+		    Thread.currentThread().interrupt();
 		}
-		myAgent.send(reply);
-		}
-		else {
-			System.out.println(getAID().getLocalName()+":" +state);
-				state = ParticipantAgentState.initiated;
-		block();
-		}
-	}
-	}
 */
+	  }
+	 
+	  
+	   public boolean done() {
+	  	
+	    if (state == ParticipantAgentState.done)
+	    {
+		    //System.out.println(getAID().getLocalName()+": is done.");	
+		    return true;
+	    }
+	    else
+	    {
+		    return false;
+	    }
+	  }
+	}
 
 }
