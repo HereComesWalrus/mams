@@ -39,7 +39,6 @@ public class ParticipantAgent extends Agent {
 
 
   protected void setup() {
-   // catalogue = new Hashtable();
     myGui = new ParticipantGui(this);
     myGui.display();
     
@@ -60,7 +59,6 @@ public class ParticipantAgent extends Agent {
 		 }	
 	System.out.println("\n");
 
-    //book selling service registration at DF
     DFAgentDescription dfd = new DFAgentDescription();
     dfd.setName(getAID());
     ServiceDescription sd = new ServiceDescription();
@@ -102,7 +100,6 @@ public class ParticipantAgent extends Agent {
 	private class OfferRequestsServer extends Behaviour {
 	
 	  ACLMessage msg;
-	  MessageTemplate mt;
 	  
 	  private boolean contains(Integer[] arr, Integer item) {
       return Arrays.stream(arr).anyMatch(item::equals);
@@ -125,12 +122,13 @@ public class ParticipantAgent extends Agent {
 					System.out.println(getAID().getLocalName() + ": the following participants have been found");
 					participantAgents = new AID[result.length - 1];
 					int i=0; int j=0;
+							
 					while (i < result.length)
 					{
 						if (!String.valueOf(result[i].getName()).equals(String.valueOf(getAID())))
 						{
 							participantAgents[j] = result[i].getName();
-							System.out.println("test "+ participantAgents[j].getLocalName());
+							System.out.println(participantAgents[j].getLocalName());
 							j++;
 						}
 						else
@@ -171,9 +169,8 @@ public class ParticipantAgent extends Agent {
 					e.printStackTrace();
 				}
 			    
-			    System.out.println("received json from SchedularAgent: \n"+json);//update a list of known sellers (DF)
+			    System.out.println("received json from SchedularAgent: \n"+json);
 				// calculate
-			    
 			    
 			    JSONArray availableHours = (JSONArray)json.get("availableHours");
 			    
@@ -186,10 +183,6 @@ public class ParticipantAgent extends Agent {
 					else
 						asked_hours[i] = null;
 				}
-				//for (int i=0; i<asked_hours.length;i++)
-				//	System.out.print("asked_hours[i]: "+ asked_hours[i]);
-
-				//	System.out.print("\n");
 					
 			    for(Object key:calendar.keySet()) 
 			    {
@@ -209,7 +202,6 @@ public class ParticipantAgent extends Agent {
 					i++;
 				
 				asked_hours[i]=hourIndex;
-				//asked_hours.put(i, Integer.parseInt(String.valueOf(availableHours.get(hourIndex))));
 				
 				if (priority >=0.5){ // we need it for the first time
 					
@@ -245,7 +237,7 @@ public class ParticipantAgent extends Agent {
 			      
 			    state = ParticipantAgentState.negotiating;
 
-			    }			
+			}			
 			else if (msg.getPerformative() == ACLMessage.PROPOSE && state == ParticipantAgentState.negotiating) 
 			{
 				String jsonString = msg.getContent();
@@ -262,10 +254,6 @@ public class ParticipantAgent extends Agent {
 
 				System.out.println(getAID().getLocalName()+": proposed by " +msg.getSender().getLocalName()+json);
 						
-						// look for priority and do neccassary calc.
-						// if it is not available, send 1st participant a message that the xx participant not available 
-						// if even one participant not available for entire day, send message to SchedularAgent through first participant that the meeting can not be set.
-					
 				JSONArray availableHours = (JSONArray)json.get("availableHours");
 					    
 			    JSONArray list = (JSONArray)json.get("asked_hours");
@@ -312,20 +300,11 @@ public class ParticipantAgent extends Agent {
 				reply.setContent(jsonString);
 				reply.setConversationId("participant-accept");
 				    				     
-				System.out.println(getAID().getLocalName() + ": Send accept_propasals. ");
-				        //state = ParticipantAgentState.waiting;
-					
+				System.out.println(getAID().getLocalName() + ": Send accept_propasals. ");					
 				}
 				else
 				{	// that hour is not available for participant, suggesting a new one
 					
-					/*
-if (asked_hours[asked_hours.length-1] != null)
-					{
-						System.out.println(getAID().getLocalName()+": list has not an empty spot.");
-						return;
-					}
-*/	
 					reply = new ACLMessage(ACLMessage.PROPOSE);
 
 					System.out.println(getAID().getLocalName()+": refused. sending new propose.");
@@ -337,7 +316,7 @@ if (asked_hours[asked_hours.length-1] != null)
 
 					
 					state = ParticipantAgentState.negotiating;
-							
+						
 					for(Object key:calendar.keySet()) 
 					{
 						double value = calendar.get(Integer.parseInt(String.valueOf(key)));
@@ -345,7 +324,7 @@ if (asked_hours[asked_hours.length-1] != null)
 						
 						if (list.contains(hour) == false && contains(asked_hours, hour) == false )
 						{
-							System.out.println(getAID().getLocalName()+": priority: "+ priority+" list doesnt contains: "+hour+ " (wtf list[1]:"+list.get(1)+") priority: "+ value + "  new_priority:"+ new_priority);
+							System.out.println(getAID().getLocalName()+": priority: "+ priority+" list doesnt contains: "+hour+ " priority: "+ value + "  new_priority:"+ new_priority);
 
 							System.out.println(getAID().getLocalName()+": list: "+list);
 
@@ -427,11 +406,11 @@ if (asked_hours[asked_hours.length-1] != null)
 
 				if (acceptCount == participantAgents.length)
 				{
-					System.out.println(getAID().getLocalName()+" I think now message can be sended to SchedularAgent.(test)");
 					state = ParticipantAgentState.informing;
 					
 					if (replySchedulerAgent == null)
 					{
+						System.out.println(getAID().getLocalName()+" will inform first participant that all participants decided to set a meeting.");
 						ACLMessage inform = new ACLMessage(ACLMessage.INFORM);
 										
 						inform.setContent(msg.getContent());
@@ -444,10 +423,10 @@ if (asked_hours[asked_hours.length-1] != null)
 						myAgent.send(inform);
 					}
 					else{
-						
-						System.out.println(getAID().getLocalName()+ "is first participant, it will respond back." );
+						System.out.println(getAID().getLocalName()+ ": is first participant, it will respond back to SchedularAgent." );
 						replySchedulerAgent.setContent(msg.getContent());
 						myAgent.send(replySchedulerAgent);
+						state = ParticipantAgentState.done;	
 						//myAgent.doDelete();
 					}		
 				}
@@ -463,10 +442,11 @@ if (asked_hours[asked_hours.length-1] != null)
 			{
 				if (replySchedulerAgent != null)
 				{
-					System.out.println(msg.getSender().getLocalName()+ "informed: "+getAID().getLocalName()+" and it will respond back." );	
+					System.out.println(msg.getSender().getLocalName()+ " informed: "+getAID().getLocalName()+" and it will respond back to SchedularAgent." );	
 					replySchedulerAgent.setContent(msg.getContent());
 					myAgent.send(replySchedulerAgent);	
-					//myAgent.doDelete();	
+					//myAgent.doDelete();
+					state = ParticipantAgentState.done;	
 				}
 	
 			}
@@ -475,40 +455,18 @@ if (asked_hours[asked_hours.length-1] != null)
 				System.out.print("\n\n\n\n"+getAID().getLocalName()+": got this message from "+ msg.getSender().getLocalName()+"\n"+msg+"\n\n\n\n");
 			}		
 	 
-	    }	
-		else if (state == ParticipantAgentState.waiting)
+	    }
+		else 
 		{
-			//System.out.println(getAID().getLocalName()+": is waiting without getting message.");	
+			block();
 		}	
-		else if (state == ParticipantAgentState.done)
-		{
-			System.out.println(getAID().getLocalName()+": is done. without getting message.");	
-		}
-
-		/*
-try        
-		{
-		    Thread.sleep(1000);
-		} 
-		catch(InterruptedException ex) 
-		{
-		    Thread.currentThread().interrupt();
-		}
-*/
+		
 	  }
 	 
 	  
 	   public boolean done() {
 	  	
-	    if (state == ParticipantAgentState.done)
-	    {
-		    //System.out.println(getAID().getLocalName()+": is done.");	
-		    return true;
-	    }
-	    else
-	    {
-		    return false;
-	    }
+	    return(state == ParticipantAgentState.done);
 	  }
 	}
 
