@@ -317,59 +317,61 @@ public class ParticipantAgent extends Agent {
 					
 					state = ParticipantAgentState.negotiating;
 						
-					for(Object key:calendar.keySet()) 
+					double highest_priority = -1;
+					int highest_hour = -1;
+					
+					for (int i=0; i< calendar.size();i++)
 					{
-						double value = calendar.get(Integer.parseInt(String.valueOf(key)));
-						int hour = Integer.parseInt(String.valueOf(key));						
-						
-						if (list.contains(hour) == false && contains(asked_hours, hour) == false )
+						int hour = Integer.parseInt(String.valueOf(calendar.keySet().toArray()[i]));
+						if (contains(asked_hours, hour) == false )
 						{
-							System.out.println(getAID().getLocalName()+": priority: "+ priority+" list doesnt contains: "+hour+ " priority: "+ value + "  new_priority:"+ new_priority);
-
-							System.out.println(getAID().getLocalName()+": list: "+list);
-
-							if (priority < value && value >= 0.5)
+							double value = calendar.get(hour);
+							if (highest_priority < value)
 							{
-								priority = value;
-								System.out.println(getAID().getLocalName()+"priority set to : "+priority+ " from hour: "+hour);
-								int i = 0;
-						    	while (i < asked_hours.length)
-								{
-									if (asked_hours[i] == null)
-									{
-										asked_hours[i] = hour; 
-										System.out.println(getAID().getLocalName()+"new suggested hour: "+asked_hours[i] +" asked_hours:"+Arrays.asList(asked_hours));
-										break;
-									 }
-									 else {i++;}	 
-								}
-								break;
-						    }
-							else if (priority != -1 && priority >= value && priority - value<= 0.5)
-							{
-								//if (asked_hours[i] == hour)
-
-								int i = 0;
-								while (i < asked_hours.length)
-								{
-									if (asked_hours[i] == null)
-									{
-									asked_hours[i] = hour; 
-									System.out.println(getAID().getLocalName()+": difference accaptable :"+ String.valueOf(priority - value) + " new suggested hour: "+hour+" asked_hours:"+Arrays.asList(asked_hours));
-									break;
-									}
-									else {i++;}	 
-								}
-								break;
-							}
-							else if (priority - value> 0.5)
-							{
-								System.out.println(getAID().getLocalName()+": difference huge :"+ String.valueOf(priority - value) + "  hour: "+hour +" priority:"+priority+" value:"+value );
-
+								highest_priority = value;
+								highest_hour = hour;
 							}
 						}
-					}	
+					}
 						
+					System.out.println("\n\n"+getAID().getLocalName()+": highest_hour: "+ highest_hour+" highest_priority: "+ highest_priority+"\n");
+						
+					if (highest_priority != -1 && priority < highest_priority && highest_priority >= 0.5)
+					{
+						priority = highest_priority;
+						System.out.println(getAID().getLocalName()+"priority set to : "+priority+ " from hour: "+highest_hour);
+						int i = 0;
+					   	while (i < asked_hours.length)
+						{
+							if (asked_hours[i] == null)
+							{
+								asked_hours[i] = highest_hour; 
+								System.out.println(getAID().getLocalName()+"new suggested hour: "+asked_hours[i] +" asked_hours:"+Arrays.asList(asked_hours));
+								break;
+							}
+							else {i++;}	 
+						}
+					}
+					else if (highest_priority != -1 && priority >= highest_priority && priority - highest_priority<= 0.5)
+					{
+						int i = 0;
+						while (i < asked_hours.length)
+						{
+							if (asked_hours[i] == null)
+							{
+								asked_hours[i] = highest_hour; 
+								System.out.println(getAID().getLocalName()+": difference accaptable :"+ String.valueOf(priority - highest_priority) + " new suggested hour: "+highest_hour+" asked_hours:"+Arrays.asList(asked_hours));
+								break;
+							}
+							else {i++;}	 
+						}
+					}
+					else if (highest_priority != -1 && priority - highest_priority> 0.5)
+					{
+						System.out.println(getAID().getLocalName()+": difference huge :"+ String.valueOf(priority - highest_priority) + "  hour: "+highest_hour +" priority:"+priority+" value:"+highest_priority );
+
+					}
+					
 					acceptCount=0;	
 					JSONObject obj = new JSONObject();
 					obj.put("availableHours", availableHours);
